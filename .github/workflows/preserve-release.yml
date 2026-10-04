@@ -1,0 +1,53 @@
+name: Preserve v1.6.3 release
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/preserve-release.yml]
+permissions:
+  contents: write
+concurrency:
+  group: preserve-v1.6.3
+  cancel-in-progress: false
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Download and verify original release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download v1.6.3 --repo alireza0/s-ui --dir dist
+          cp UPSTREAM-SHA256SUMS-v1.6.3 dist/UPSTREAM-SHA256SUMS-v1.6.3
+          cd dist
+          sha256sum -c UPSTREAM-SHA256SUMS-v1.6.3
+      - name: Point packaged management scripts at this repository
+        run: |
+          set -euo pipefail
+          for archive in dist/s-ui-linux-*.tar.gz; do
+            tmp=$(mktemp -d)
+            tar -xzf "$archive" -C "$tmp"
+            sed -i 's|alireza0/s-ui|docker0536/s-ui-independent|g' "$tmp/s-ui/s-ui.sh"
+            bash -n "$tmp/s-ui/s-ui.sh"
+            tar -czf "$archive" -C "$tmp" s-ui
+            rm -rf "$tmp"
+          done
+          bash -n install.sh
+          bash -n s-ui.sh
+          cp install.sh s-ui.sh dist/
+          cd dist
+          sha256sum s-ui-linux-*.tar.gz s-ui-windows-*.zip install.sh s-ui.sh > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - name: Save assets in own release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view v1.6.3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create v1.6.3 --repo "$GITHUB_REPOSITORY" --verify-tag --title "v1.6.3 independent backup" --notes "Preserved upstream v1.6.3 binaries. Linux management scripts point to docker0536/s-ui-independent. SHA256SUMS covers the repackaged assets; UPSTREAM-SHA256SUMS-v1.6.3 records the original checksums."
+          fi
+          gh release upload v1.6.3 dist/* --repo "$GITHUB_REPOSITORY" --clobber
+
