@@ -1,7 +1,8 @@
 ---
 services:
   s-ui:
-    image: alireza7/s-ui
+    build: .
+    image: s-ui-independent:local
     container_name: s-ui
     hostname: "s-ui"
     volumes:
